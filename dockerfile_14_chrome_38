@@ -1,0 +1,63 @@
+# Usar una imagen base de Ubuntu 14.04
+FROM ubuntu:14.04
+
+# Crear un usuario no privilegiado para ejecutar Chromium
+RUN groupadd -g 1000 chromium && useradd -u 1000 -g chromium -m -d /home/chromium chromium
+
+RUN mkdir -p /home/chromium/chromium_data
+
+RUN chown chromium:chromium --recursive /home/chromium/chromium_data
+
+ENV GTK_THEME=Adwaita-dark
+
+# Actualizar los repositorios e instalar las dependencias mínimas necesarias para Chromium 38
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    gnupg \
+    ca-certificates \
+    libx11-6 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libasound2 \
+    libnss3 \
+    gconf-service \
+    libatk1.0-0 \
+    libcairo2 \
+    libcups2 \
+    libgconf-2-4 \
+    libgtk2.0-0 \
+    libxtst6 \
+    xdg-utils \
+    libgnome-keyring0 \
+    libxss1 \
+    gnome-themes-standard \
+    man \
+    --no-install-recommends
+
+# Copiar todos los archivos .deb desde el directorio local al contenedor
+COPY *.deb /tmp/
+
+# Instalar todos los paquetes .deb
+RUN dpkg -i /tmp/*.deb || true && \
+    apt-get install -y --fix-missing && \
+    dpkg -i /tmp/*.deb && \
+    apt-mark hold chromium-browser chromium-codecs-ffmpeg-extra && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN rm /tmp/*.deb
+
+# Limpiar el caché de apt para reducir el tamaño de la imagen
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Configuración para permitir el acceso a la pantalla (X11 forwarding)
+ENV DISPLAY=:0
+RUN mkdir -p /home/chromium/.X11
+VOLUME /tmp/.X11-unix
+
+# Cambiar a un usuario no privilegiado para ejecutar Chromium
+USER chromium
+
+# Ejecutar Chromium con acceso a la pantalla
+ENTRYPOINT ["chromium-browser", "--no-sandbox", "--disable-gpu", "--remote-debugging-port=9222", "--user-data-dir=/home/chromium/chromium_data"]
